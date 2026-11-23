@@ -1,6 +1,6 @@
 const { randomUUID } = require('node:crypto');
 const documentsRepository = require('../repositories/documents.repository');
-const { AppError } = require('../errors');
+const { DocumentNotFoundError, DocumentAccessDeniedError } = require('./document.errors');
 
 function createDocument({ owner, file }) {
   const document = {
@@ -22,10 +22,10 @@ function listDocumentsByOwner(owner) {
 function getDocumentForDownload({ id, owner }) {
   const document = documentsRepository.findById(id);
   if (!document) {
-    throw new AppError(404, 'Documento não encontrado.');
+    throw new DocumentNotFoundError();
   }
   if (document.owner !== owner) {
-    throw new AppError(403, 'Você não tem permissão para acessar este documento.');
+    throw new DocumentAccessDeniedError();
   }
   return { document, filePath: documentsRepository.getFilePath(document) };
 }

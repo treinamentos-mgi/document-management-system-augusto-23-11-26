@@ -9,6 +9,8 @@ process.env.STORAGE_DIR = storageDir;
 process.env.MAX_FILE_SIZE_MB = '1';
 
 const app = require('../src/app');
+const documentsService = require('../src/services/documents.service');
+const { DocumentNotFoundError, DocumentAccessDeniedError } = require('../src/services/document.errors');
 
 const OWNER = 'user-a';
 const OTHER_OWNER = 'user-b';
@@ -41,6 +43,24 @@ async function uploadDocument(options) {
   assert.strictEqual(response.status, 201);
   return response.json();
 }
+
+test('o serviço aplica propriedade e retorna erros de domínio sem status HTTP', () => {
+  const document = documentsService.createDocument({
+    owner: 'user-service',
+    file: { originalName: 'service.txt', storedName: 'service.txt', mimeType: 'text/plain', size: 5 },
+  });
+
+  assert.deepStrictEqual(documentsService.listDocumentsByOwner('user-service'), [document]);
+  assert.strictEqual(documentsService.getDocumentForDownload({ id: document.id, owner: 'user-service' }).document, document);
+  assert.throws(
+    () => documentsService.getDocumentForDownload({ id: document.id, owner: OTHER_OWNER }),
+    (error) => error instanceof DocumentAccessDeniedError && error.status === undefined,
+  );
+  assert.throws(
+    () => documentsService.getDocumentForDownload({ id: 'nao-existe', owner: 'user-service' }),
+    (error) => error instanceof DocumentNotFoundError && error.status === undefined,
+  );
+});
 
 test('POST /upload grava o arquivo e devolve os metadados sem storedName', async () => {
   const body = await uploadDocument({ content: 'olá mundo', filename: 'contrato.txt' });
@@ -102,6 +122,7 @@ test('GET /documents/:id/download bloqueia outro usuário com 403', async () => 
   });
 
   assert.strictEqual(response.status, 403);
+  assert.deepStrictEqual(await response.json(), { error: 'Você não tem permissão para acessar este documento.' });
 });
 
 test('GET /documents/:id/download retorna 404 para identificador inexistente', async () => {
@@ -110,4 +131,5 @@ test('GET /documents/:id/download retorna 404 para identificador inexistente', a
   });
 
   assert.strictEqual(response.status, 404);
+  assert.deepStrictEqual(await response.json(), { error: 'Documento não encontrado.' });
 });

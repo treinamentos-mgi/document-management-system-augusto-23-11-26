@@ -14,6 +14,7 @@ const express = require('express');
 const config = require('./config');
 const documentsRoutes = require('./routes/documents.routes');
 const { AppError } = require('./errors');
+const { DocumentNotFoundError, DocumentAccessDeniedError } = require('./services/document.errors');
 
 const app = express();
 
@@ -32,6 +33,12 @@ app.use((err, req, res, next) => {
   }
   if (err instanceof AppError) {
     return res.status(err.status).json({ error: err.message });
+  }
+  if (err instanceof DocumentNotFoundError) {
+    return res.status(404).json({ error: err.message });
+  }
+  if (err instanceof DocumentAccessDeniedError) {
+    return res.status(403).json({ error: err.message });
   }
   if (err.expose && err.status) {
     return res.status(err.status).json({ error: 'Requisição inválida.' });
