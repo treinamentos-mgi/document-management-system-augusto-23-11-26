@@ -101,6 +101,29 @@ test('GET /documents lista somente os documentos do usuário', async () => {
   assert.strictEqual(list[0].storedName, undefined);
 });
 
+test('GET /documents exige identificação do usuário', async () => {
+  const response = await fetch(`${baseUrl}/documents`);
+  assert.strictEqual(response.status, 400);
+});
+
+test('upload e download preservam bytes e não usam caminhos fornecidos como nome de armazenamento', async () => {
+  const content = Uint8Array.from([0, 1, 128, 255]);
+  const existingFiles = new Set(fs.readdirSync(storageDir));
+  const document = await uploadDocument({ owner: 'user-binary', content, filename: '../../arquivo.bin', type: 'application/octet-stream' });
+  const newFiles = fs.readdirSync(storageDir).filter((filename) => !existingFiles.has(filename));
+
+  assert.strictEqual(document.originalName, 'arquivo.bin');
+  assert.strictEqual(newFiles.length, 1);
+  assert.match(newFiles[0], /^[0-9a-f-]{36}\.bin$/);
+  assert.deepStrictEqual(fs.readFileSync(path.join(storageDir, newFiles[0])), Buffer.from(content));
+
+  const response = await fetch(`${baseUrl}/documents/${document.id}/download`, {
+    headers: { 'X-User-Id': 'user-binary' },
+  });
+  assert.strictEqual(response.status, 200);
+  assert.deepStrictEqual(Buffer.from(await response.arrayBuffer()), Buffer.from(content));
+});
+
 test('GET /documents/:id/download devolve o conteúdo ao dono', async () => {
   const doc = await uploadDocument({ owner: 'user-download', content: 'dados', filename: 'relatorio.txt' });
 
@@ -112,6 +135,12 @@ test('GET /documents/:id/download devolve o conteúdo ao dono', async () => {
   assert.strictEqual(await response.text(), 'dados');
   assert.match(response.headers.get('content-type'), /^text\/plain/);
   assert.match(response.headers.get('content-disposition'), /^attachment; filename="relatorio\.txt"/);
+});
+
+test('GET /documents/:id/download exige identificação do usuário', async () => {
+  const doc = await uploadDocument({ owner: 'user-download-without-header' });
+  const response = await fetch(`${baseUrl}/documents/${doc.id}/download`);
+  assert.strictEqual(response.status, 400);
 });
 
 test('GET /documents/:id/download bloqueia outro usuário com 403', async () => {
